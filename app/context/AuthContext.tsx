@@ -10,6 +10,8 @@ export interface User {
   email: string;
   role: UserRole;
   avatar?: string;
+  points?: number;
+  tier?: string;
   createdAt?: string;
 }
 
@@ -59,19 +61,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [promptMessage, setPromptMessage] = useState<string | null>(null);
 
-  // Load user session from localStorage
+  // Load user session from localStorage & listen for updates
   useEffect(() => {
-    const savedUser = localStorage.getItem('luxe_bistro_user');
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch (e) {
-        console.error('Failed to parse auth user', e);
+    const refreshUser = () => {
+      const savedUser = localStorage.getItem('luxe_bistro_user');
+      if (savedUser) {
+        try {
+          setUser(JSON.parse(savedUser));
+        } catch (e) {
+          console.error('Failed to parse auth user', e);
+        }
       }
+    };
+
+    refreshUser();
+
+    const handleStorage = () => refreshUser();
+    window.addEventListener('storage', handleStorage);
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      channel = new BroadcastChannel('luxe_bistro_loyalty_sync');
+      channel.onmessage = () => refreshUser();
     }
+
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      if (channel) channel.close();
+    };
   }, []);
 
   const login = (email: string, role?: UserRole, name?: string) => {
+    try {
+      fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, role, name })
+      }).catch(err => console.error('Prisma sync error', err));
+    } catch (e) {}
+
     let matchedUser = DEMO_USERS.find((u) => u.email.toLowerCase() === email.toLowerCase());
     
     if (!matchedUser) {
@@ -91,6 +119,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const register = (name: string, email: string, role: UserRole = 'customer') => {
+    try {
+      fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, role })
+      }).catch(err => console.error('Prisma sync error', err));
+    } catch (e) {}
+
     const newUser: User = {
       id: `u-${Date.now()}`,
       name,

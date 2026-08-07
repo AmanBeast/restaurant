@@ -44,16 +44,16 @@ export interface Review {
 export const MENU_ITEMS: MenuItem[] = [
   {
     id: 'm1',
-    name: 'Wagyu Medallion',
+    name: 'Royal Dum Biryani',
     category: 'Non-Vegetarian',
-    price: 54,
-    description: 'Slow-seared A5 Wagyu served with truffle-infused jus, smoked marrow, and roasted seasonal vegetables.',
-    image: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1000&q=80',
+    price: 34,
+    description: 'Fragrant basmati rice slow-cooked with aromatic Indian spices, saffron, and tender chicken/paneer.',
+    image: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=1000&q=80',
     rating: 4.9,
     reviewsCount: 128,
     dietary: ['GLUTEN-FREE'],
     isPopular: true,
-    calories: 780
+    calories: 680
   },
   {
     id: 'm2',

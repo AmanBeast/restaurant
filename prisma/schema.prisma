@@ -1,0 +1,47 @@
+// Optimized Prisma Schema for Restaurant & Loyalty Ecosystem
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../generated/prisma"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String               @id @default(cuid())
+  name         String
+  email        String               @unique
+  password     String?
+  role         String               @default("customer")
+  points       Int                  @default(0)
+  tier         String               @default("Bronze")
+  phone        String?
+  avatar       String?
+  transactions LoyaltyTransaction[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@index([email])
+  @@index([role])
+}
+
+model LoyaltyTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userName    String
+  type        String
+  points      Int
+  description String
+  date        String
+  orderId     String?
+  rewardTitle String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([orderId])
+  @@index([createdAt])
+}

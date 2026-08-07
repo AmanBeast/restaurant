@@ -12,6 +12,8 @@ export const CartDrawer: React.FC = () => {
   const [orderComplete, setOrderComplete] = useState(false);
   const [diningOption, setDiningOption] = useState<'Dine-In' | 'Pickup'>('Dine-In');
   const [tableNumber, setTableNumber] = useState('Table 04');
+  const [earnedPoints, setEarnedPoints] = useState(0);
+  const [orderRef, setOrderRef] = useState('');
 
   if (!isCartOpen) return null;
 
@@ -29,6 +31,71 @@ export const CartDrawer: React.FC = () => {
 
   const handleConfirmOrder = (e: React.FormEvent) => {
     e.preventDefault();
+    const newOrderRef = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
+    const pointsToAdd = Math.floor(grandTotal);
+    setOrderRef(newOrderRef);
+    setEarnedPoints(pointsToAdd);
+
+    // Award loyalty points in shared database if user is logged in
+    if (user) {
+      try {
+        // 1. Update active user
+        const currentPoints = user.points || 450;
+        const newPoints = currentPoints + pointsToAdd;
+        const getTier = (pts: number) => pts >= 1000 ? 'Platinum' : pts >= 500 ? 'Gold' : pts >= 200 ? 'Silver' : 'Bronze';
+        const updatedUser = { ...user, points: newPoints, tier: getTier(newPoints) };
+        localStorage.setItem('luxe_bistro_user', JSON.stringify(updatedUser));
+
+        // 2. Update all users list
+        const savedUsers = localStorage.getItem('luxe_bistro_users');
+        const usersList = savedUsers ? JSON.parse(savedUsers) : [];
+        const updatedList = usersList.some((u: any) => u.email === user.email)
+          ? usersList.map((u: any) => u.email === user.email ? updatedUser : u)
+          : [updatedUser, ...usersList];
+        localStorage.setItem('luxe_bistro_users', JSON.stringify(updatedList));
+
+        // 3. Add loyalty transaction log
+        const savedTx = localStorage.getItem('luxe_bistro_loyalty_tx');
+        const txList = savedTx ? JSON.parse(savedTx) : [];
+        const newTx = {
+          id: `tx-${Date.now()}`,
+          userId: user.id,
+          userName: user.name,
+          type: 'EARNED',
+          points: pointsToAdd,
+          description: `Online Order #${newOrderRef}`,
+          date: 'Just now',
+          orderId: newOrderRef
+        };
+        localStorage.setItem('luxe_bistro_loyalty_tx', JSON.stringify([newTx, ...txList]));
+
+        // 4. Cross-tab BroadcastChannel broadcast
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          const channel = new BroadcastChannel('luxe_bistro_loyalty_sync');
+          channel.postMessage({ type: 'POINTS_EARNED', user: updatedUser, transaction: newTx });
+          channel.close();
+        }
+
+        // 5. Sync to Prisma Postgres database
+        fetch('/api/loyalty/earn', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            userEmail: user.email,
+            points: pointsToAdd,
+            description: `Online Order #${newOrderRef}`,
+            orderId: newOrderRef
+          })
+        }).catch(err => console.error('Failed to sync loyalty points to Prisma DB', err));
+
+        // Dispatch storage event for live multi-window sync
+        window.dispatchEvent(new Event('storage'));
+      } catch (err) {
+        console.error('Failed to sync loyalty points', err);
+      }
+    }
+
     setOrderComplete(true);
     setTimeout(() => {
       clearCart();
@@ -156,6 +223,10 @@ export const CartDrawer: React.FC = () => {
                 <div className="flex justify-between border-t border-dashed border-[#E8E3DC] pt-2">
                   <span className="text-[#66615B]">Total Paid:</span>
                   <span className="font-bold text-[#A3834C]">${grandTotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center bg-[#F0FDF4] border border-[#BBF7D0] p-2.5 rounded text-[#166534] font-semibold mt-2">
+                  <span>🎉 Loyalty Points Earned:</span>
+                  <span className="font-bold text-sm">+{earnedPoints} Pts</span>
                 </div>
               </div>
               <button 
