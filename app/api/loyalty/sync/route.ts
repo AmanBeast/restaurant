@@ -1,27 +1,19 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../lib/prisma';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // Parallel optimized query execution with field projections & limits
-    const [users, transactions] = await Promise.all([
-      prisma.user.findMany({
-        take: 100,
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          points: true,
-          tier: true,
-          phone: true,
-          avatar: true,
-          createdAt: true
-        },
-        orderBy: { updatedAt: 'desc' }
-      }),
+    const { searchParams } = new URL(request.url);
+    const userEmail = searchParams.get('email')?.toLowerCase();
+
+    // Fetch users, transactions, and settings in parallel
+    const [dbUsers, dbTransactions, settingsObj] = await Promise.all([
+      userEmail 
+        ? prisma.user.findMany({ where: { email: userEmail }, select: { id: true, name: true, email: true, role: true, points: true, tier: true, phone: true, avatar: true, createdAt: true } })
+        : prisma.user.findMany({ take: 100, select: { id: true, name: true, email: true, role: true, points: true, tier: true, phone: true, avatar: true, createdAt: true } }),
       prisma.loyaltyTransaction.findMany({
         take: 100,
+        orderBy: { createdAt: 'desc' },
         select: {
           id: true,
           userId: true,
@@ -33,20 +25,33 @@ export async function GET() {
           orderId: true,
           rewardTitle: true,
           createdAt: true
-        },
-        orderBy: { createdAt: 'desc' }
-      })
+        }
+      }),
+      prisma.programSettings.findUnique({ where: { id: 'default' } })
     ]);
 
-    return NextResponse.json(
-      { success: true, users, transactions },
-      {
-        headers: {
-          'Cache-Control': 'public, s-maxage=5, stale-while-revalidate=10'
-        }
+    const validityMonths = settingsObj?.pointsValidityMonths ?? 2;
+
+    let validTransactions = dbTransactions;
+    if (validityMonths > 0) {
+      const cutoffDate = new Date();
+      cutoffDate.setMonth(cutoffDate.getMonth() - validityMonths);
+      validTransactions = dbTransactions.filter(tx => new Date(tx.createdAt) >= cutoffDate);
+    }
+
+    const response = NextResponse.json({
+      success: true,
+      users: dbUsers,
+      transactions: validTransactions,
+      settings: {
+        pointsValidityMonths: validityMonths,
+        pointsEarningRate: settingsObj?.pointsEarningRate ?? 1
       }
-    );
+    });
+
+    response.headers.set('Cache-Control', 's-maxage=2, stale-while-revalidate=5');
+    return response;
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || 'Sync error' }, { status: 500 });
+    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }

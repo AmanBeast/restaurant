@@ -45,3 +45,10 @@ model LoyaltyTransaction {
   @@index([orderId])
   @@index([createdAt])
 }
+
+model ProgramSettings {
+  id                   String   @id @default("default")
+  pointsValidityMonths Int      @default(2) // 1 month, 2 months, 3 months, 6 months, etc.
+  pointsEarningRate    Int      @default(1) // 1 point per $1
+  updatedAt            DateTime @updatedAt
+}
